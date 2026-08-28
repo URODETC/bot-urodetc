@@ -1,0 +1,9 @@
+[project]
+name = "bot-urodetc"
+version = "0.1.0"
+description = "Personal service platform with Telegram interface"
+requires-python = ">=3.14"
+dependencies = [
+    "aiogram>=3.31.0",
+    "asyncio>=4.0.0",
+]
