@@ -4,12 +4,15 @@ from aiogram import Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
+from app.infrastructure.config import Settings
 from app.infrastructure.history import HistoryRepository
 from app.telegram.flows.network import perform_lookup
 from app.telegram.flows.video import start_download_flow
-from app.telegram.states import NetworkStates, VideoStates
+from app.telegram.flows.vpn import create_vpn_user, extend_vpn_user, require_vpn_owner
+from app.telegram.states import NetworkStates, VideoStates, VpnStates
 from app.tools.network.service import NetworkService
 from app.tools.video.service import VideoService
+from app.tools.vpn.service import VpnService
 
 router = Router(name="state-inputs")
 
@@ -52,3 +55,39 @@ async def on_network_target(
         kind=kind,
         target=target,
     )
+
+
+@router.message(VpnStates.awaiting_create)
+async def on_vpn_create_input(
+    message: Message,
+    state: FSMContext,
+    settings: Settings,
+    vpn_service: VpnService,
+) -> None:
+    if not await require_vpn_owner(message, settings):
+        await state.clear()
+        return
+    raw = (message.text or "").strip()
+    if not raw:
+        await message.answer("Пришлите параметры текстом.")
+        return
+    await state.clear()
+    await create_vpn_user(message, vpn_service, raw)
+
+
+@router.message(VpnStates.awaiting_extend)
+async def on_vpn_extend_input(
+    message: Message,
+    state: FSMContext,
+    settings: Settings,
+    vpn_service: VpnService,
+) -> None:
+    if not await require_vpn_owner(message, settings):
+        await state.clear()
+        return
+    raw = (message.text or "").strip()
+    if not raw:
+        await message.answer("Пришлите параметры текстом.")
+        return
+    await state.clear()
+    await extend_vpn_user(message, vpn_service, raw)

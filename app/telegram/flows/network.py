@@ -6,42 +6,69 @@ from typing import Any
 from aiogram.types import BufferedInputFile, Message
 
 from app.infrastructure.history import HistoryRepository
+from app.telegram.loading import LoadingIndicator
 from app.telegram.menu import result_keyboard
 from app.telegram.ui import (
     esc,
     format_dns,
     format_geo,
+    format_http_check,
     format_ip_owner,
+    format_mtr,
+    format_ping,
     format_rdns,
     format_tls,
     format_whois,
     friendly_network_error,
 )
 from app.tools.network.errors import NetworkToolError
-from app.tools.network.infographics import render_geo_card, render_ip_owner_card
-from app.tools.network.models import DnsResult, GeoResult, IpOwnerResult, LookupKind, RdnsResult, TlsResult, WhoisResult
+from app.tools.network.infographics import (
+    render_geo_card,
+    render_http_card,
+    render_ip_owner_card,
+    render_mtr_card,
+    render_ping_card,
+)
+from app.tools.network.models import (
+    DnsResult,
+    GeoResult,
+    HttpCheckResult,
+    IpOwnerResult,
+    LookupKind,
+    MtrResult,
+    PingResult,
+    RdnsResult,
+    TlsResult,
+    WhoisResult,
+)
 from app.tools.network.service import NetworkService
 
 _CAPTION_LIMIT = 1024
 
-_FORMATTERS: dict[LookupKind, Callable[[Any], str]] = {
-    LookupKind.WHOIS: format_whois,
-    LookupKind.GEO: format_geo,
-    LookupKind.DNS: format_dns,
-    LookupKind.LIR: format_ip_owner,
-    LookupKind.RDNS: format_rdns,
-    LookupKind.TLS: format_tls,
+_FORMATTERS: dict[type[Any], Callable[[Any], str]] = {
+    WhoisResult: format_whois,
+    GeoResult: format_geo,
+    DnsResult: format_dns,
+    IpOwnerResult: format_ip_owner,
+    RdnsResult: format_rdns,
+    TlsResult: format_tls,
+    PingResult: format_ping,
+    HttpCheckResult: format_http_check,
+    MtrResult: format_mtr,
 }
 
 
 def _handlers(service: NetworkService) -> dict[LookupKind, Callable[[str], Awaitable[Any]]]:
     return {
-        LookupKind.WHOIS: service.whois_domain,
+        LookupKind.WHOIS: service.whois,
         LookupKind.GEO: service.geolocate,
-        LookupKind.DNS: service.dns_lookup,
+        LookupKind.DNS: service.ip_lookup,
         LookupKind.LIR: service.ip_owner,
         LookupKind.RDNS: service.reverse_dns,
         LookupKind.TLS: service.tls_cert,
+        LookupKind.PING: service.ping,
+        LookupKind.CHECK: service.check_http,
+        LookupKind.MTR: service.mtr,
     }
 
 
@@ -58,6 +85,12 @@ def _summarize(kind: LookupKind, result: Any) -> str:
         return ", ".join(result.hostnames[:1]) or "—"
     if isinstance(result, TlsResult):
         return result.issuer or "—"
+    if isinstance(result, PingResult):
+        return f"loss {result.packet_loss:g}%, avg {result.avg_ms or 0:.1f} ms"
+    if isinstance(result, HttpCheckResult):
+        return f"HTTP {result.status_code}, {result.elapsed_ms:.0f} ms"
+    if isinstance(result, MtrResult):
+        return f"{len(result.hops)} hops"
     return "—"
 
 
@@ -66,6 +99,14 @@ def _render_image(kind: LookupKind, result: Any) -> bytes | None:
         return render_geo_card(result)
     if kind is LookupKind.LIR and isinstance(result, IpOwnerResult):
         return render_ip_owner_card(result)
+    if isinstance(result, IpOwnerResult):
+        return render_ip_owner_card(result)
+    if isinstance(result, PingResult):
+        return render_ping_card(result)
+    if isinstance(result, HttpCheckResult):
+        return render_http_card(result)
+    if isinstance(result, MtrResult):
+        return render_mtr_card(result)
     return None
 
 
@@ -89,7 +130,8 @@ async def perform_lookup(
 
     handler = _handlers(service)[lookup_kind]
     try:
-        result = await handler(target)
+        async with LoadingIndicator(message, "Проверяю"):
+            result = await handler(target)
     except NetworkToolError as exc:
         await history.add(
             user_id=message.from_user.id,
@@ -102,7 +144,7 @@ async def perform_lookup(
         await message.answer(friendly_network_error(exc), reply_markup=result_keyboard(kind))
         return
 
-    text = _FORMATTERS[lookup_kind](result)
+    text = _FORMATTERS[type(result)](result)
     await history.add(
         user_id=message.from_user.id,
         kind=kind,

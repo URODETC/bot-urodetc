@@ -4,7 +4,7 @@ ENV PYTHONUNBUFFERED=1 \
     UV_LINK_MODE=copy
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ffmpeg curl \
+    && apt-get install -y --no-install-recommends ffmpeg curl iputils-ping mtr-tiny \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /srv

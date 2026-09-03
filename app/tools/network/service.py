@@ -3,13 +3,24 @@ from __future__ import annotations
 from dataclasses import replace
 
 from app.tools.network.errors import NetworkToolError
-from app.tools.network.models import DnsResult, GeoResult, IpOwnerResult, RdnsResult, TlsResult, WhoisResult
+from app.tools.network.models import (
+    DnsResult,
+    GeoResult,
+    HttpCheckResult,
+    IpOwnerResult,
+    MtrResult,
+    PingResult,
+    RdnsResult,
+    TlsResult,
+    WhoisResult,
+)
+from app.tools.network.providers.diagnostics import DiagnosticsProvider
 from app.tools.network.providers.dns import DnsProvider
 from app.tools.network.providers.geo import GeoProvider
 from app.tools.network.providers.ip_owner import IpOwnerProvider
 from app.tools.network.providers.tls import TlsProvider
 from app.tools.network.providers.whois import WhoisProvider
-from app.tools.network.validators import require_domain, require_host, require_ip
+from app.tools.network.validators import is_ip, require_domain, require_host, require_http_url, require_ip
 
 
 class NetworkService:
@@ -27,12 +38,28 @@ class NetworkService:
         dns: DnsProvider,
         ip_owner: IpOwnerProvider,
         tls: TlsProvider,
+        diagnostics: DiagnosticsProvider,
     ) -> None:
         self._whois = whois
         self._geo = geo
         self._dns = dns
         self._ip_owner = ip_owner
         self._tls = tls
+        self._diagnostics = diagnostics
+
+    async def whois(self, raw: str) -> WhoisResult | IpOwnerResult:
+        """WHOIS-style lookup for either domains/URLs or IP addresses."""
+        host = require_host(raw)
+        if is_ip(host):
+            return await self.ip_owner(host)
+        return await self.whois_domain(host)
+
+    async def ip_lookup(self, raw: str) -> DnsResult | RdnsResult:
+        """DNS records for a domain, PTR records for an IP address."""
+        host = require_host(raw)
+        if is_ip(host):
+            return await self.reverse_dns(host)
+        return await self.dns_lookup(host)
 
     async def whois_domain(self, raw: str) -> WhoisResult:
         domain = require_domain(raw)
@@ -67,3 +94,15 @@ class NetworkService:
     async def tls_cert(self, raw: str) -> TlsResult:
         domain = require_domain(raw)
         return await self._tls.fetch(domain)
+
+    async def ping(self, raw: str) -> PingResult:
+        host = require_host(raw)
+        return await self._diagnostics.ping(host)
+
+    async def check_http(self, raw: str) -> HttpCheckResult:
+        url = require_http_url(raw)
+        return await self._diagnostics.check_http(url)
+
+    async def mtr(self, raw: str) -> MtrResult:
+        host = require_host(raw)
+        return await self._diagnostics.mtr(host)

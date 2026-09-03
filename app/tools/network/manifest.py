@@ -8,7 +8,7 @@ NETWORK_MANIFEST = ToolManifest(
         "Network diagnostics: domain WHOIS, IP geolocation, DNS/NS lookup, "
         "IP ownership (RIR/LIR), reverse DNS and TLS certificate info"
     ),
-    commands=[],
+    commands=["whois", "ip", "ping", "check", "mtr", "geo", "rdns", "tls"],
     inline=True,
     async_mode=False,
 )

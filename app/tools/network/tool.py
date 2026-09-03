@@ -16,12 +16,15 @@ class NetworkTool(BaseTool):
     def __init__(self, service: NetworkService) -> None:
         self._service = service
         self._dispatch: dict[LookupKind, Callable[[str], Awaitable[Any]]] = {
-            LookupKind.WHOIS: service.whois_domain,
+            LookupKind.WHOIS: service.whois,
             LookupKind.GEO: service.geolocate,
-            LookupKind.DNS: service.dns_lookup,
+            LookupKind.DNS: service.ip_lookup,
             LookupKind.LIR: service.ip_owner,
             LookupKind.RDNS: service.reverse_dns,
             LookupKind.TLS: service.tls_cert,
+            LookupKind.PING: service.ping,
+            LookupKind.CHECK: service.check_http,
+            LookupKind.MTR: service.mtr,
         }
 
     async def execute(self, *, kind: str, target: str, **_: Any) -> ToolResult:

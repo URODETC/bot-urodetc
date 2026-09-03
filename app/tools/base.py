@@ -20,6 +20,7 @@ class ToolManifest:
     commands: list[str] = field(default_factory=list)
     inline: bool = False
     async_mode: bool = False
+    required_permission: str = "public"
 
 
 @dataclass

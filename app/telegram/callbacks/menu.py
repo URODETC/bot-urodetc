@@ -10,6 +10,7 @@ from app.infrastructure.models import DownloadRecord, LookupRecord
 from app.telegram.menu import (
     MAIN_MENU_TEXT,
     MENU_HISTORY,
+    MENU_DEVELOPER,
     MENU_MAIN,
     MENU_NETWORK,
     MENU_VIDEO,
@@ -23,6 +24,7 @@ from app.telegram.pagination import PAGE_SIZE, add_pagination_row, clamp_page, p
 from app.telegram.states import VideoStates
 from app.telegram.ui import esc
 from app.tools.video.service import VideoService
+from app.telegram.commands.help import DEVELOPER_HELP
 
 router = Router(name="menu-callbacks")
 
@@ -56,6 +58,17 @@ async def on_video(callback: CallbackQuery, state: FSMContext) -> None:
             "🎬 Пришлите ссылку на видео YouTube.",
             reply_markup=cancel_keyboard(),
         )
+    await callback.answer()
+
+
+@router.callback_query(F.data == MENU_DEVELOPER)
+async def on_developer(callback: CallbackQuery, state: FSMContext) -> None:
+    await state.clear()
+    if callback.message is not None:
+        builder = InlineKeyboardBuilder()
+        builder.row(InlineKeyboardButton(text="🌐 Сетевое меню", callback_data=MENU_NETWORK))
+        builder.row(InlineKeyboardButton(text="⬅️ Назад", callback_data=MENU_MAIN))
+        await callback.message.edit_text(DEVELOPER_HELP, reply_markup=builder.as_markup())
     await callback.answer()
 
 

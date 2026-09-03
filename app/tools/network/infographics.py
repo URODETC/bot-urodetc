@@ -6,7 +6,7 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
-from app.tools.network.models import GeoResult, IpOwnerResult
+from app.tools.network.models import GeoResult, HttpCheckResult, IpOwnerResult, MtrResult, PingResult
 
 _ASSETS_DIR = Path(__file__).parent / "assets" / "fonts"
 _FONT_REGULAR = _ASSETS_DIR / "DejaVuSans.ttf"
@@ -152,6 +152,116 @@ def render_ip_owner_card(owner: IpOwnerResult) -> bytes:
 
     _draw_block_bar(draw, owner, accent, top=500, left=40, width=_WIDTH - 80, height=64)
     return _to_png(img)
+
+
+def render_ping_card(result: PingResult) -> bytes:
+    accent = "#4ade80" if result.received and result.packet_loss < 50 else "#fb7185"
+    img, draw = _new_canvas(accent)
+    _header(
+        draw,
+        badge="PING",
+        title=result.host,
+        subtitle=result.ip,
+        accent=accent,
+    )
+    avg = f"{result.avg_ms:.1f} ms" if result.avg_ms is not None else "—"
+    _rows(
+        draw,
+        [
+            ("Средняя задержка", avg),
+            ("Потеря пакетов", f"{result.packet_loss:g}%"),
+            ("Получено", f"{result.received} из {result.transmitted}"),
+        ],
+        top=225,
+        left=40,
+    )
+    _draw_latency_chart(draw, result.samples_ms, accent, top=230, left=470, width=490, height=300)
+    return _to_png(img)
+
+
+def render_http_card(result: HttpCheckResult) -> bytes:
+    accent = "#4ade80" if result.reachable else "#fb7185"
+    img, draw = _new_canvas(accent)
+    _header(
+        draw,
+        badge="HTTP CHECK",
+        title=f"{result.status_code} {result.reason}",
+        subtitle=_truncate(result.final_url, 72),
+        accent=accent,
+    )
+    _rows(
+        draw,
+        [
+            ("Время ответа", f"{result.elapsed_ms:.0f} ms"),
+            ("Переадресации", str(result.redirects)),
+            ("Сервер", _truncate(result.server or "—", 36)),
+            ("Тип содержимого", _truncate(result.content_type or "—", 36)),
+        ],
+        top=225,
+        left=40,
+    )
+    cx, cy = 760, 365
+    draw.ellipse((cx - 120, cy - 120, cx + 120, cy + 120), outline=_GRID_COLOR, width=24)
+    fraction = min(result.elapsed_ms / 3000, 1.0)
+    draw.arc((cx - 120, cy - 120, cx + 120, cy + 120), -90, -90 + int(360 * fraction), fill=accent, width=24)
+    draw.text((cx, cy - 24), f"{result.elapsed_ms:.0f}", font=_font(48, True), fill=_VALUE_COLOR, anchor="mm")
+    draw.text((cx, cy + 32), "ms", font=_font(22), fill=_LABEL_COLOR, anchor="mm")
+    return _to_png(img)
+
+
+def render_mtr_card(result: MtrResult) -> bytes:
+    accent = "#a78bfa"
+    img, draw = _new_canvas(accent)
+    _header(draw, badge="MTR", title=result.host, subtitle=f"Маршрут до {result.ip}", accent=accent)
+    hops = result.hops[:9]
+    top = 225
+    draw.text((54, top - 5), "HOP", font=_font(17, True), fill=_LABEL_COLOR)
+    draw.text((145, top - 5), "УЗЕЛ", font=_font(17, True), fill=_LABEL_COLOR)
+    draw.text((670, top - 5), "AVG", font=_font(17, True), fill=_LABEL_COLOR)
+    draw.text((825, top - 5), "LOSS", font=_font(17, True), fill=_LABEL_COLOR)
+    for index, hop in enumerate(hops):
+        y = top + 32 + index * 38
+        draw.ellipse((62, y + 4, 76, y + 18), fill=accent)
+        if index < len(hops) - 1:
+            draw.line((69, y + 18, 69, y + 42), fill=_GRID_COLOR, width=3)
+        draw.text((92, y), str(hop.number), font=_font(19, True), fill=_VALUE_COLOR)
+        draw.text((145, y), _truncate(hop.host, 38), font=_font(19), fill=_VALUE_COLOR)
+        avg = f"{hop.avg_ms:.1f} ms" if hop.avg_ms is not None else "—"
+        loss = f"{hop.loss_percent:g}%" if hop.loss_percent is not None else "—"
+        draw.text((670, y), avg, font=_font(19, True), fill=_VALUE_COLOR)
+        draw.text((825, y), loss, font=_font(19, True), fill="#fb7185" if (hop.loss_percent or 0) > 0 else _VALUE_COLOR)
+    if len(result.hops) > len(hops):
+        draw.text((145, 584), f"… ещё {len(result.hops) - len(hops)} узлов в текстовом отчёте", font=_font(17), fill=_LABEL_COLOR)
+    return _to_png(img)
+
+
+def _draw_latency_chart(
+    draw: ImageDraw.ImageDraw,
+    samples: tuple[float, ...],
+    accent: str,
+    *,
+    top: int,
+    left: int,
+    width: int,
+    height: int,
+) -> None:
+    draw.rounded_rectangle((left, top, left + width, top + height), radius=18, fill=_PANEL, outline=_GRID_COLOR, width=2)
+    draw.text((left + 22, top + 18), "ЗАДЕРЖКА ПО ПАКЕТАМ", font=_font(18), fill=_LABEL_COLOR)
+    if not samples:
+        draw.text((left + width // 2, top + height // 2), "Нет ответов", font=_font(28, True), fill=_VALUE_COLOR, anchor="mm")
+        return
+    chart_top, chart_bottom = top + 75, top + height - 38
+    maximum = max(max(samples), 1.0)
+    points = []
+    for index, sample in enumerate(samples):
+        x = left + 30 + int(index * (width - 60) / max(len(samples) - 1, 1))
+        y = chart_bottom - int(sample / maximum * (chart_bottom - chart_top))
+        points.append((x, y))
+    if len(points) > 1:
+        draw.line(points, fill=accent, width=5, joint="curve")
+    for x, y in points:
+        draw.ellipse((x - 7, y - 7, x + 7, y + 7), fill=accent)
+    draw.text((left + 20, chart_top - 10), f"{maximum:.1f} ms", font=_font(15), fill=_LABEL_COLOR)
 
 
 def _draw_world_map(

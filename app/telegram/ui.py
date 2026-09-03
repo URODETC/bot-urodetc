@@ -9,7 +9,17 @@ from app.tools.network.errors import (
     NotFoundError,
     ValidationError,
 )
-from app.tools.network.models import DnsResult, GeoResult, IpOwnerResult, RdnsResult, TlsResult, WhoisResult
+from app.tools.network.models import (
+    DnsResult,
+    GeoResult,
+    HttpCheckResult,
+    IpOwnerResult,
+    MtrResult,
+    PingResult,
+    RdnsResult,
+    TlsResult,
+    WhoisResult,
+)
 from app.tools.video.errors import (
     AuthRequiredError,
     DiskFullError,
@@ -173,6 +183,42 @@ def format_tls(result: TlsResult) -> str:
         lines.append(f"{warn}Осталось дней: <b>{result.days_left}</b>")
     if result.san:
         lines.append(f"🌐 SAN: {esc(', '.join(result.san[:8]))}")
+    return "\n".join(lines)
+
+
+def format_ping(result: PingResult) -> str:
+    state = "✅ Доступен" if result.received else "❌ Нет ответа"
+    lines = [f"📡 <b>Ping: {esc(result.host)}</b>", "", state, f"🌐 IP: <code>{esc(result.ip)}</code>"]
+    lines.append(f"📦 Пакеты: {result.received}/{result.transmitted}, потери {result.packet_loss:g}%")
+    if result.avg_ms is not None:
+        lines.append(f"⏱ min/avg/max: {result.min_ms:.1f}/{result.avg_ms:.1f}/{result.max_ms:.1f} ms")
+    lines.append("\n<i>Проверено с текущего сервера бота.</i>")
+    return "\n".join(lines)
+
+
+def format_http_check(result: HttpCheckResult) -> str:
+    state = "✅ Сервер отвечает" if result.reachable else "⚠️ Сервер вернул ошибку"
+    lines = [f"🌐 <b>HTTP-проверка</b>", "", state]
+    lines.append(f"Код: <b>{result.status_code} {esc(result.reason)}</b>")
+    lines.append(f"⏱ Ответ: <b>{result.elapsed_ms:.0f} ms</b>")
+    lines.append(f"↪️ Переадресаций: {result.redirects}")
+    lines.append(f"🔗 Итоговый URL: {esc(result.final_url)}")
+    if result.server:
+        lines.append(f"🖥 Сервер: {esc(result.server)}")
+    if result.content_type:
+        lines.append(f"📄 Content-Type: {esc(result.content_type)}")
+    lines.append("\n<i>Проверено с текущего сервера бота.</i>")
+    return "\n".join(lines)
+
+
+def format_mtr(result: MtrResult) -> str:
+    lines = [f"🛣 <b>MTR: {esc(result.host)}</b>", f"Цель: <code>{esc(result.ip)}</code>", "", "<pre>Hop  Узел                 Avg      Loss"]
+    for hop in result.hops[:20]:
+        host = hop.host if len(hop.host) <= 20 else hop.host[:19] + "…"
+        avg = f"{hop.avg_ms:.1f}ms" if hop.avg_ms is not None else "—"
+        loss = f"{hop.loss_percent:g}%" if hop.loss_percent is not None else "—"
+        lines.append(f"{hop.number:>3}  {esc(host):<20} {avg:>8} {loss:>8}")
+    lines.append("</pre>\n<i>Маршрут измерен с текущего сервера бота.</i>")
     return "\n".join(lines)
 
 

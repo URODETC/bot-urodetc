@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.tools.base import BaseTool, ToolManifest, ToolResult
+from app.tools.base import BaseTool, ToolManifest, ToolResult, ToolResultKind
 
 
 class ToolNotFoundError(LookupError):
@@ -35,8 +35,21 @@ class ToolRegistry:
     def manifests(self) -> list[ToolManifest]:
         return [tool.manifest for tool in self._tools.values()]
 
-    async def execute(self, name: str, **kwargs: Any) -> ToolResult:
-        return await self.get(name).execute(**kwargs)
+    async def execute(
+        self,
+        name: str,
+        *,
+        permission: str = "public",
+        **kwargs: Any,
+    ) -> ToolResult:
+        tool = self.get(name)
+        required = tool.manifest.required_permission
+        if required != "public" and permission != required:
+            return ToolResult(
+                kind=ToolResultKind.FAILED,
+                error=f"Tool {name} requires {required} permission",
+            )
+        return await tool.execute(**kwargs)
 
     def __iter__(self):
         return iter(self._tools.values())

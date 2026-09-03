@@ -9,3 +9,8 @@ class VideoStates(StatesGroup):
 
 class NetworkStates(StatesGroup):
     awaiting_target = State()
+
+
+class VpnStates(StatesGroup):
+    awaiting_create = State()
+    awaiting_extend = State()

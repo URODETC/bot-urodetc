@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ipaddress
 import re
+from urllib.parse import urlsplit, urlunsplit
 
 from app.tools.network.errors import ValidationError
 
@@ -71,3 +72,26 @@ def require_host(raw: str) -> str:
     raise ValidationError(
         "Укажите IP-адрес или домен. Пример: 8.8.8.8 или example.com"
     )
+
+
+def require_http_url(raw: str) -> str:
+    value = raw.strip()
+    if not value:
+        raise ValidationError("Укажите URL. Пример: https://example.com")
+    if "://" not in value:
+        value = f"https://{value}"
+    try:
+        parsed = urlsplit(value)
+        port = parsed.port
+    except ValueError as exc:
+        raise ValidationError("Некорректный URL") from exc
+    if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+        raise ValidationError("Поддерживаются только HTTP(S)-ссылки")
+    if parsed.username or parsed.password:
+        raise ValidationError("URL с логином или паролем не поддерживается")
+    hostname = parsed.hostname.encode("idna").decode("ascii")
+    host = f"[{hostname}]" if ":" in hostname else hostname
+    if port is not None:
+        host = f"{host}:{port}"
+    path = parsed.path or "/"
+    return urlunsplit((parsed.scheme, host, path, parsed.query, ""))

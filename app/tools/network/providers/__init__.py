@@ -1,3 +1,4 @@
+from app.tools.network.providers.diagnostics import DiagnosticsProvider, SystemDiagnosticsProvider
 from app.tools.network.providers.dns import DnsPythonProvider
 from app.tools.network.providers.geo import IpApiGeoProvider
 from app.tools.network.providers.ip_owner import RdapIpOwnerProvider
@@ -10,10 +11,12 @@ from app.tools.network.providers.whois import (
 
 __all__ = [
     "CompositeWhoisProvider",
+    "DiagnosticsProvider",
     "DnsPythonProvider",
     "IpApiGeoProvider",
     "LegacyWhoisProvider",
     "RdapIpOwnerProvider",
     "RdapWhoisProvider",
     "SocketTlsProvider",
+    "SystemDiagnosticsProvider",
 ]

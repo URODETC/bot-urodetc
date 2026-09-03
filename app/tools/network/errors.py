@@ -19,3 +19,7 @@ class LookupFailedError(NetworkToolError):
 
 class NotFoundError(NetworkToolError):
     """No data could be found for the requested target."""
+
+
+class DiagnosticUnavailableError(NetworkToolError):
+    """The host system does not provide a required diagnostic binary."""

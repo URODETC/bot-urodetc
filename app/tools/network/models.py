@@ -11,6 +11,9 @@ class LookupKind(StrEnum):
     LIR = "lir"
     RDNS = "rdns"
     TLS = "tls"
+    PING = "ping"
+    CHECK = "check"
+    MTR = "mtr"
 
 
 @dataclass(frozen=True)
@@ -100,3 +103,50 @@ class TlsResult:
     valid_until: str | None
     san: tuple[str, ...] = ()
     days_left: int | None = None
+
+
+@dataclass(frozen=True)
+class PingResult:
+    host: str
+    ip: str
+    transmitted: int
+    received: int
+    packet_loss: float
+    min_ms: float | None
+    avg_ms: float | None
+    max_ms: float | None
+    samples_ms: tuple[float, ...] = ()
+
+
+@dataclass(frozen=True)
+class HttpCheckResult:
+    url: str
+    final_url: str
+    status_code: int
+    reason: str
+    elapsed_ms: float
+    redirects: int
+    server: str | None
+    content_type: str | None
+    content_length: int | None
+    reachable: bool
+
+
+@dataclass(frozen=True)
+class MtrHop:
+    number: int
+    host: str
+    loss_percent: float | None
+    sent: int | None
+    last_ms: float | None
+    avg_ms: float | None
+    best_ms: float | None
+    worst_ms: float | None
+
+
+@dataclass(frozen=True)
+class MtrResult:
+    host: str
+    ip: str
+    hops: tuple[MtrHop, ...]
+    source: str = "mtr"
