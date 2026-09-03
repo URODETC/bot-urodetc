@@ -11,3 +11,12 @@ wheels/
 
 # Environment
 .env
+
+# Runtime data (SQLite db, downloaded media)
+data/
+
+# Browser cookies for yt-dlp (sensitive)
+cookies.txt
+
+.kilo/
+.ruff_cache/

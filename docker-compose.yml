@@ -1,0 +1,82 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: bot
+      POSTGRES_PASSWORD: bot
+      POSTGRES_DB: bot
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bot -d bot"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  potoken:
+    # bgutil-ytdlp-pot-provider — HTTP-сервер, генерирующий PO-токены
+    # для обхода "Sign in to confirm you're not a bot" на YouTube.
+    # Плагин (PyPI: bgutil-ytdlp-pot-provider) берёт из него токены.
+    image: brainicism/bgutil-ytdlp-pot-provider:latest
+    restart: unless-stopped
+    ports: 
+      - "4416:4416"
+
+  bot:
+    build: .
+    restart: unless-stopped
+    command: ["python", "-m", "app.main"]
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://bot:bot@db:5432/bot
+      REDIS_URL: redis://redis:6379/0
+      DOWNLOAD_DIR: /srv/data/downloads
+      LOCAL_API_BASE: ${LOCAL_API_BASE:-}
+      COOKIES_FILE: ${COOKIES_FILE:-}
+      POTOKEN_HTTP_URL: ${POTOKEN_HTTP_URL:-http://potoken:4416}
+    volumes:
+      - media:/srv/data/downloads
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      potoken:
+        condition: service_started
+
+  worker:
+    build: .
+    restart: unless-stopped
+    command: ["arq", "app.tools.video.worker.WorkerSettings"]
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://bot:bot@db:5432/bot
+      REDIS_URL: redis://redis:6379/0
+      DOWNLOAD_DIR: /srv/data/downloads
+      LOCAL_API_BASE: ${LOCAL_API_BASE:-}
+      COOKIES_FILE: ${COOKIES_FILE:-}
+      POTOKEN_HTTP_URL: ${POTOKEN_HTTP_URL:-http://potoken:4416}
+    volumes:
+      - media:/srv/data/downloads
+      - ./cookies.txt:/srv/cookies.txt:ro
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      potoken:
+        condition: service_started
+
+volumes:
+  pgdata:
+  media:
