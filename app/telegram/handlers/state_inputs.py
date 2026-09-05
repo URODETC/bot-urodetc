@@ -9,6 +9,7 @@ from app.infrastructure.history import HistoryRepository
 from app.telegram.flows.network import perform_lookup
 from app.telegram.flows.video import start_download_flow
 from app.telegram.flows.vpn import create_vpn_user, extend_vpn_user, require_vpn_owner
+from app.telegram.menu import MENU_VPN, cancel_keyboard, main_menu_keyboard
 from app.telegram.states import NetworkStates, VideoStates, VpnStates
 from app.tools.network.service import NetworkService
 from app.tools.video.service import VideoService
@@ -25,7 +26,7 @@ async def on_video_url(
 ) -> None:
     url = (message.text or "").strip()
     if not url:
-        await message.answer("Пришлите ссылку текстом.")
+        await message.answer("Пришлите ссылку текстом.", reply_markup=cancel_keyboard())
         return
     await state.clear()
     await start_download_flow(message, video_service, url)
@@ -40,13 +41,16 @@ async def on_network_target(
 ) -> None:
     target = (message.text or "").strip()
     if not target:
-        await message.answer("Пришлите значение текстом.")
+        await message.answer("Пришлите значение текстом.", reply_markup=cancel_keyboard())
         return
     data = await state.get_data()
     kind = data.get("kind")
     await state.clear()
     if not kind:
-        await message.answer("Сессия устарела, откройте меню заново: /menu")
+        await message.answer(
+            "Сессия устарела, откройте меню заново: /menu",
+            reply_markup=main_menu_keyboard(),
+        )
         return
     await perform_lookup(
         message,
@@ -69,7 +73,10 @@ async def on_vpn_create_input(
         return
     raw = (message.text or "").strip()
     if not raw:
-        await message.answer("Пришлите параметры текстом.")
+        await message.answer(
+            "Пришлите параметры текстом.",
+            reply_markup=cancel_keyboard(MENU_VPN),
+        )
         return
     await state.clear()
     await create_vpn_user(message, vpn_service, raw)
@@ -87,7 +94,10 @@ async def on_vpn_extend_input(
         return
     raw = (message.text or "").strip()
     if not raw:
-        await message.answer("Пришлите параметры текстом.")
+        await message.answer(
+            "Пришлите параметры текстом.",
+            reply_markup=cancel_keyboard(MENU_VPN),
+        )
         return
     await state.clear()
     await extend_vpn_user(message, vpn_service, raw)

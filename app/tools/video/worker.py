@@ -2,15 +2,18 @@ from __future__ import annotations
 
 import logging
 import os
+from contextlib import suppress
 from zoneinfo import ZoneInfo
 
 import httpx
+from aiogram import Bot
 from arq import cron
 from arq.connections import RedisSettings
 
 from app.infrastructure.config import DEFAULT_REDIS_URL, Settings
 from app.infrastructure.database import Database
 from app.telegram.bot import build_bot
+from app.telegram.menu import main_menu_keyboard
 from app.telegram.vpn_ui import split_vpn_report
 from app.tools.video.downloader import VideoDownloader
 from app.tools.video.provider import YtDlpProvider
@@ -86,6 +89,7 @@ async def send_vpn_report(
     ctx: dict,
     *,
     chat_ids: list[int] | None = None,
+    status_messages: dict[str, int] | None = None,
 ) -> None:
     settings: Settings = ctx["settings"]
     recipients = tuple(chat_ids or settings.vpn_report_recipients)
@@ -97,18 +101,57 @@ async def send_vpn_report(
                 "recipients": len(recipients),
             },
         )
+        if status_messages:
+            for chat_id in status_messages:
+                with suppress(Exception):
+                    await ctx["bot"].send_message(
+                        int(chat_id),
+                        "❌ VPN-отчёт недоступен: воркер не настроен.",
+                        reply_markup=main_menu_keyboard(),
+                    )
+        await _delete_status_messages(ctx["bot"], status_messages)
         return
-    report = await ctx["vpn_service"].weekly_report()
-    for chat_id in recipients:
-        for text in split_vpn_report(
-            report,
-            top_users=settings.remnawave_report_top_users,
-        ):
-            await ctx["bot"].send_message(chat_id, text)
+    try:
+        report = await ctx["vpn_service"].weekly_report()
+        report_parts = list(
+            split_vpn_report(
+                report,
+                top_users=settings.remnawave_report_top_users,
+            )
+        )
+        for chat_id in recipients:
+            for index, text in enumerate(report_parts):
+                is_last = index == len(report_parts) - 1
+                await ctx["bot"].send_message(
+                    chat_id,
+                    text,
+                    reply_markup=main_menu_keyboard() if is_last else None,
+                )
+    except Exception:
+        logger.exception("vpn report failed", extra={"recipients": len(recipients)})
+        if status_messages:
+            for chat_id in recipients:
+                await ctx["bot"].send_message(
+                    chat_id,
+                    "❌ Не удалось собрать VPN-отчёт.",
+                    reply_markup=main_menu_keyboard(),
+                )
+        raise
+    finally:
+        await _delete_status_messages(ctx["bot"], status_messages)
     logger.info(
         "vpn report sent",
         extra={"recipients": len(recipients), "users": len(report.user_usage)},
     )
+
+
+async def _delete_status_messages(
+    bot: Bot,
+    status_messages: dict[str, int] | None,
+) -> None:
+    for chat_id, message_id in (status_messages or {}).items():
+        with suppress(Exception):
+            await bot.delete_message(chat_id=int(chat_id), message_id=message_id)
 
 
 class WorkerSettings:

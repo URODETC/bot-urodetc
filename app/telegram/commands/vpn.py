@@ -11,7 +11,7 @@ from app.telegram.flows.vpn import (
     queue_vpn_report,
     require_vpn_owner,
 )
-from app.telegram.menu import VPN_MENU_TEXT, vpn_menu_keyboard
+from app.telegram.menu import VPN_MENU_TEXT, main_menu_keyboard, vpn_menu_keyboard
 from app.tools.vpn.service import VpnService
 
 router = Router(name="vpn-commands")
@@ -36,7 +36,8 @@ async def vpn_add(
     if not argument:
         await message.answer(
             "Использование: <code>/vpn_add имя [дней] [лимит_ГБ] [telegram_id]</code>\n"
-            "0 ГБ означает безлимит, <code>-</code> — значение по умолчанию."
+            "0 ГБ означает безлимит, <code>-</code> — значение по умолчанию.",
+            reply_markup=main_menu_keyboard(),
         )
         return
     await create_vpn_user(message, vpn_service, argument)
@@ -52,7 +53,10 @@ async def vpn_extend(
         return
     argument = _argument(message)
     if not argument:
-        await message.answer("Использование: <code>/vpn_extend имя количество_дней</code>")
+        await message.answer(
+            "Использование: <code>/vpn_extend имя количество_дней</code>",
+            reply_markup=main_menu_keyboard(),
+        )
         return
     await extend_vpn_user(message, vpn_service, argument)
 

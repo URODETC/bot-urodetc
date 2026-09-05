@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import unittest
 from datetime import date, datetime, timezone
+from types import SimpleNamespace
 
 import httpx
 
@@ -16,6 +17,7 @@ from app.tools.vpn.models import (
 )
 from app.tools.vpn.provider import RemnawaveHttpProvider
 from app.tools.vpn.service import GIB, VpnService
+from app.tools.video.worker import send_vpn_report
 
 
 def _raw_user(*, api_major: int = 3, username: str = "alice", user_id: int = 7) -> dict:
@@ -235,6 +237,62 @@ class VpnTelegramParsingTests(unittest.TestCase):
             ("alice", 30, None, 123),
         )
         self.assertEqual(parse_extend_request("alice 15"), ("alice", 15))
+
+
+class _FakeBot:
+    def __init__(self) -> None:
+        self.messages: list[tuple[int, str, object | None]] = []
+        self.deleted: list[tuple[int, int]] = []
+
+    async def send_message(self, chat_id: int, text: str, *, reply_markup=None) -> None:
+        self.messages.append((chat_id, text, reply_markup))
+
+    async def delete_message(self, chat_id: int, message_id: int) -> None:
+        self.deleted.append((chat_id, message_id))
+
+
+class VpnReportWorkerTests(unittest.IsolatedAsyncioTestCase):
+    async def test_manual_report_deletes_status_and_puts_menu_last(self) -> None:
+        bot = _FakeBot()
+        service = VpnService(_FakeProvider(), report_timezone="Europe/Moscow")
+        settings = SimpleNamespace(
+            remnawave_configured=True,
+            vpn_report_recipients=(),
+            remnawave_report_top_users=20,
+        )
+
+        await send_vpn_report(
+            {"bot": bot, "vpn_service": service, "settings": settings},
+            chat_ids=[123],
+            status_messages={"123": 456},
+        )
+
+        self.assertEqual(bot.deleted, [(123, 456)])
+        self.assertTrue(bot.messages)
+        self.assertIsNotNone(bot.messages[-1][2])
+
+    async def test_failed_report_also_deletes_status_and_restores_menu(self) -> None:
+        class BrokenService:
+            async def weekly_report(self):
+                raise RuntimeError("provider failed")
+
+        bot = _FakeBot()
+        settings = SimpleNamespace(
+            remnawave_configured=True,
+            vpn_report_recipients=(),
+            remnawave_report_top_users=20,
+        )
+
+        with self.assertRaises(RuntimeError):
+            await send_vpn_report(
+                {"bot": bot, "vpn_service": BrokenService(), "settings": settings},
+                chat_ids=[123],
+                status_messages={"123": 456},
+            )
+
+        self.assertEqual(bot.deleted, [(123, 456)])
+        self.assertEqual(bot.messages[-1][0], 123)
+        self.assertIsNotNone(bot.messages[-1][2])
 
 
 def _user(username: str, user_id: int) -> VpnUser:

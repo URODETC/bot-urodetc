@@ -15,6 +15,7 @@ from aiogram.types import FSInputFile
 
 from app.infrastructure.config import Settings
 from app.infrastructure.models import DownloadRecord
+from app.telegram.menu import main_menu_keyboard
 from app.tools.video.errors import FileTooLargeError, VideoError
 from app.tools.video.models import KIND_AUDIO, MediaOption
 from app.tools.video.provider import MediaProvider
@@ -51,6 +52,7 @@ class VideoDownloader:
         option = self._service.selected_option(record)
         if option is None:
             await self._service.fail(request_id, "Формат не выбран")
+            await self._delete_status(bot, record)
             await self._notify_error(bot, record, "Формат не выбран")
             return
 
@@ -69,9 +71,7 @@ class VideoDownloader:
             await self._enforce_size(record, path)
             await self._send_file(bot, record, path)
             await self._service.complete(request_id, path.stat().st_size)
-            await self._edit_message(
-                bot, record, "✅ Скачано и отправлено"
-            )
+            await self._delete_status(bot, record)
         except FileTooLargeError as exc:
             await self._handle_failure(bot, record, exc)
         except VideoError as exc:
@@ -160,6 +160,7 @@ class VideoDownloader:
                 performer=self._escaped((record.author or "")[:64]),
                 duration=record.duration,
                 caption=self._caption(record),
+                reply_markup=main_menu_keyboard(),
             )
         else:
             await bot.send_video(
@@ -170,6 +171,7 @@ class VideoDownloader:
                 duration=record.duration,
                 supports_streaming=True,
                 caption=self._caption(record),
+                reply_markup=main_menu_keyboard(),
             )
         logger.info(
             "file sent",
@@ -179,7 +181,7 @@ class VideoDownloader:
     async def _handle_failure(self, bot: Bot, record: DownloadRecord, error: Exception | str) -> None:
         message = str(error) or "Ошибка"
         await self._service.fail(record.id, message)
-        await self._edit_message(bot, record, f"❌ {self._escaped(message)}")
+        await self._delete_status(bot, record)
         await self._notify_error(bot, record, message)
 
     async def _notify_error(self, bot: Bot, record: DownloadRecord, message: str) -> None:
@@ -190,6 +192,7 @@ class VideoDownloader:
                 record.chat_id,
                 f"❌ {message}",
                 parse_mode=None,
+                reply_markup=main_menu_keyboard(),
             )
         except Exception:
             logger.exception("failed to notify user", extra={"request_id": record.id})
@@ -207,10 +210,21 @@ class VideoDownloader:
                 chat_id=record.chat_id,
                 message_id=record.message_id,
                 text=text,
+                reply_markup=main_menu_keyboard(),
             )
         except Exception:
             logger.debug(
                 "preview message edit failed", extra={"request_id": record.id}
+            )
+
+    async def _delete_status(self, bot: Bot, record: DownloadRecord) -> None:
+        if not (record.chat_id and record.message_id):
+            return
+        try:
+            await bot.delete_message(record.chat_id, record.message_id)
+        except Exception:
+            logger.debug(
+                "status message delete failed", extra={"request_id": record.id}
             )
 
     @staticmethod

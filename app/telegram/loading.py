@@ -6,6 +6,8 @@ import contextlib
 from aiogram.exceptions import TelegramBadRequest, TelegramRetryAfter
 from aiogram.types import Message
 
+from app.telegram.menu import main_menu_keyboard
+
 _FRAMES = ("◐", "◓", "◑", "◒")
 
 
@@ -19,7 +21,10 @@ class LoadingIndicator:
         self._task: asyncio.Task[None] | None = None
 
     async def __aenter__(self) -> LoadingIndicator:
-        self._status = await self._request.answer(f"{_FRAMES[0]} <i>{self._label}…</i>")
+        self._status = await self._request.answer(
+            f"{_FRAMES[0]} <i>{self._label}…</i>",
+            reply_markup=main_menu_keyboard(),
+        )
         self._task = asyncio.create_task(self._animate())
         return self
 
@@ -39,7 +44,10 @@ class LoadingIndicator:
             if self._status is None:
                 return
             try:
-                await self._status.edit_text(f"{_FRAMES[index % len(_FRAMES)]} <i>{self._label}…</i>")
+                await self._status.edit_text(
+                    f"{_FRAMES[index % len(_FRAMES)]} <i>{self._label}…</i>",
+                    reply_markup=main_menu_keyboard(),
+                )
             except TelegramRetryAfter as exc:
                 await asyncio.sleep(exc.retry_after)
             except TelegramBadRequest:

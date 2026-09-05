@@ -5,6 +5,7 @@ from aiogram.filters import Command
 from aiogram.types import Message
 
 from app.telegram.flows.video import start_download_flow
+from app.telegram.menu import main_menu_keyboard
 from app.tools.video.service import VideoService
 
 router = Router(name="download")
@@ -24,6 +25,6 @@ def _extract_url(message: Message) -> str | None:
 async def download(message: Message, video_service: VideoService) -> None:
     url = _extract_url(message)
     if url is None:
-        await message.answer(_DOWNLOAD_USAGE)
+        await message.answer(_DOWNLOAD_USAGE, reply_markup=main_menu_keyboard())
         return
     await start_download_flow(message, video_service, url)

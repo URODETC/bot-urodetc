@@ -6,6 +6,7 @@ from aiogram.types import Message
 
 from app.infrastructure.history import HistoryRepository
 from app.telegram.flows.network import perform_lookup
+from app.telegram.menu import main_menu_keyboard
 from app.tools.network.service import NetworkService
 
 router = Router(name="network-commands")
@@ -43,7 +44,10 @@ async def network_command(
     if command not in _KIND_BY_COMMAND:
         return
     if not argument:
-        await message.answer(f"Использование: <code>{_USAGE[command]}</code>")
+        await message.answer(
+            f"Использование: <code>{_USAGE[command]}</code>",
+            reply_markup=main_menu_keyboard(),
+        )
         return
     await perform_lookup(
         message,

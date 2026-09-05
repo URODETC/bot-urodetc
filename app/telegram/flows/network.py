@@ -7,7 +7,7 @@ from aiogram.types import BufferedInputFile, Message
 
 from app.infrastructure.history import HistoryRepository
 from app.telegram.loading import LoadingIndicator
-from app.telegram.menu import result_keyboard
+from app.telegram.menu import main_menu_keyboard, result_keyboard
 from app.telegram.ui import (
     esc,
     format_dns,
@@ -125,7 +125,10 @@ async def perform_lookup(
     try:
         lookup_kind = LookupKind(kind)
     except ValueError:
-        await message.answer(f"❌ Неизвестный инструмент: {esc(kind)}")
+        await message.answer(
+            f"❌ Неизвестный инструмент: {esc(kind)}",
+            reply_markup=main_menu_keyboard(),
+        )
         return
 
     handler = _handlers(service)[lookup_kind]

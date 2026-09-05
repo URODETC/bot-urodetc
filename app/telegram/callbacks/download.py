@@ -7,6 +7,7 @@ from aiogram.types import CallbackQuery
 
 from app.infrastructure.config import Settings
 from app.telegram.keyboards import quality_keyboard, type_keyboard
+from app.telegram.menu import main_menu_keyboard
 from app.telegram.ui import esc
 from app.tools.video.models import KIND_AUDIO, KIND_VIDEO
 from app.tools.video.queue import enqueue_download
@@ -77,7 +78,12 @@ async def on_download_callback(
         await callback.answer()
     elif action == "cancel":
         await video_service.cancel_record(record_id=record_id, user_id=user_id)
-        await callback.message.edit_text("🚫 Скачивание отменено.")
+        await callback.message.delete()
+        await callback.bot.send_message(
+            callback.message.chat.id,
+            "🚫 Скачивание отменено.",
+            reply_markup=main_menu_keyboard(),
+        )
         await callback.answer("Запрос отменён", show_alert=True)
 
 
@@ -134,17 +140,28 @@ async def _start_download(
     except Exception:
         logger.exception("failed to enqueue download", extra={"request_id": record_id})
         await video_service.set_status(record_id, "failed")
-        await callback.message.edit_text("⚠️ Очередь недоступна, попробуйте позже.")
+        await callback.message.delete()
+        await callback.bot.send_message(
+            callback.message.chat.id,
+            "⚠️ Очередь недоступна, попробуйте позже.",
+            reply_markup=main_menu_keyboard(),
+        )
         await callback.answer("Ошибка очереди", show_alert=True)
         return
     if job is None:
         await video_service.set_status(record_id, "failed")
-        await callback.message.edit_text("⚠️ Очередь недоступна, попробуйте позже.")
+        await callback.message.delete()
+        await callback.bot.send_message(
+            callback.message.chat.id,
+            "⚠️ Очередь недоступна, попробуйте позже.",
+            reply_markup=main_menu_keyboard(),
+        )
         await callback.answer("Ошибка очереди", show_alert=True)
         return
 
     await callback.message.edit_text(
         f"⏳ Скачивание начато: <b>{esc(selected.quality)}</b>\n"
         f"Задача: <code>{job.job_id}</code>",
+        reply_markup=main_menu_keyboard(),
     )
     await callback.answer("Добавлено в очередь")

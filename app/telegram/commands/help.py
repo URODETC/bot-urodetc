@@ -2,6 +2,8 @@ from aiogram import Router
 from aiogram.filters import Command
 from aiogram.types import Message
 
+from app.telegram.menu import main_menu_keyboard
+
 router = Router(name="help")
 
 DEVELOPER_HELP = (
@@ -34,4 +36,4 @@ DEVELOPER_HELP = (
 
 @router.message(Command("help", "tools"))
 async def help_command(message: Message) -> None:
-    await message.answer(DEVELOPER_HELP)
+    await message.answer(DEVELOPER_HELP, reply_markup=main_menu_keyboard())

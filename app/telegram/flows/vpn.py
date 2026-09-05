@@ -3,6 +3,7 @@ from __future__ import annotations
 from aiogram.types import Message
 
 from app.infrastructure.config import Settings
+from app.telegram.menu import main_menu_keyboard, vpn_menu_keyboard
 from app.telegram.vpn_ui import (
     format_vpn_user_created,
     format_vpn_user_extended,
@@ -27,9 +28,13 @@ async def create_vpn_user(
             telegram_id=telegram_id,
         )
     except (VpnToolError, ValueError) as exc:
-        await message.answer(friendly_vpn_error(exc))
+        await message.answer(friendly_vpn_error(exc), reply_markup=main_menu_keyboard())
         return
-    await message.answer(format_vpn_user_created(user), disable_web_page_preview=True)
+    await message.answer(
+        format_vpn_user_created(user),
+        disable_web_page_preview=True,
+        reply_markup=main_menu_keyboard(),
+    )
 
 
 async def extend_vpn_user(
@@ -41,22 +46,38 @@ async def extend_vpn_user(
         username, days = parse_extend_request(raw)
         user = await service.extend_user(username, days)
     except (VpnToolError, ValueError) as exc:
-        await message.answer(friendly_vpn_error(exc))
+        await message.answer(friendly_vpn_error(exc), reply_markup=main_menu_keyboard())
         return
-    await message.answer(format_vpn_user_extended(user))
+    await message.answer(format_vpn_user_extended(user), reply_markup=main_menu_keyboard())
 
 
 async def queue_vpn_report(message: Message, settings: Settings) -> None:
     if not settings.remnawave_configured:
         await message.answer(
-            "❌ Remnawave не настроен: задайте REMNAWAVE_URL и REMNAWAVE_TOKEN."
+            "❌ Remnawave не настроен: задайте REMNAWAVE_URL и REMNAWAVE_TOKEN.",
+            reply_markup=main_menu_keyboard(),
         )
         return
-    job_id = await enqueue_vpn_report(settings.redis_url, message.chat.id)
+    status = await message.answer(
+        "⏳ Собираю VPN-отчёт…",
+        reply_markup=vpn_menu_keyboard(),
+    )
+    job_id = await enqueue_vpn_report(
+        settings.redis_url,
+        message.chat.id,
+        status_message_id=status.message_id,
+    )
     if job_id is None:
-        await message.answer("❌ Не удалось поставить отчёт в очередь.")
+        await status.delete()
+        await message.answer(
+            "❌ Не удалось поставить отчёт в очередь.",
+            reply_markup=main_menu_keyboard(),
+        )
         return
-    await message.answer(f"⏳ Собираю VPN-отчёт. Задача: <code>{job_id}</code>")
+    await status.edit_text(
+        f"⏳ Собираю VPN-отчёт. Задача: <code>{job_id}</code>",
+        reply_markup=vpn_menu_keyboard(),
+    )
 
 
 def parse_create_request(raw: str) -> tuple[str, int | None, int | None, int | None]:
@@ -93,5 +114,8 @@ async def require_vpn_owner(message: Message, settings: Settings) -> bool:
     user_id = message.from_user.id if message.from_user else None
     if settings.is_owner(user_id):
         return True
-    await message.answer("⛔ Этот инструмент доступен только владельцу бота.")
+    await message.answer(
+        "⛔ Этот инструмент доступен только владельцу бота.",
+        reply_markup=main_menu_keyboard(),
+    )
     return False

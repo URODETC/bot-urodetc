@@ -81,11 +81,21 @@ async def on_vpn_report(callback: CallbackQuery, settings: Settings) -> None:
     if not settings.remnawave_configured:
         await callback.answer("Remnawave не настроен", show_alert=True)
         return
-    job_id = await enqueue_vpn_report(settings.redis_url, callback.message.chat.id)
+    status = await callback.message.answer(
+        "⏳ Собираю VPN-отчёт…",
+        reply_markup=vpn_menu_keyboard(),
+    )
+    job_id = await enqueue_vpn_report(
+        settings.redis_url,
+        callback.message.chat.id,
+        status_message_id=status.message_id,
+    )
     if job_id is None:
+        await status.delete()
         await callback.answer("Не удалось поставить отчёт в очередь", show_alert=True)
         return
-    await callback.message.answer(
-        f"⏳ Собираю VPN-отчёт. Задача: <code>{job_id}</code>"
+    await status.edit_text(
+        f"⏳ Собираю VPN-отчёт. Задача: <code>{job_id}</code>",
+        reply_markup=vpn_menu_keyboard(),
     )
     await callback.answer("Отчёт поставлен в очередь")

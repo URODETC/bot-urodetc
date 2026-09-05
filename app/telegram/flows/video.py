@@ -4,6 +4,7 @@ from aiogram.types import Message
 
 from app.telegram.keyboards import type_keyboard
 from app.telegram.loading import LoadingIndicator
+from app.telegram.menu import main_menu_keyboard
 from app.telegram.ui import esc, format_duration, friendly_error
 from app.tools.video.errors import VideoError
 from app.tools.video.service import VideoService
@@ -18,7 +19,7 @@ async def start_download_flow(message: Message, video_service: VideoService, url
         async with LoadingIndicator(message, "Получаю информацию о видео"):
             info = await video_service.fetch_info(url)
     except VideoError as exc:
-        await message.answer(friendly_error(exc))
+        await message.answer(friendly_error(exc), reply_markup=main_menu_keyboard())
         return
 
     record = await video_service.create_record(
