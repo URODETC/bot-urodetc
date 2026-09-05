@@ -33,6 +33,7 @@ class Database:
 
     async def init(self) -> None:
         from app.infrastructure import models  # noqa: F401  (register tables)
+        from app.jobs import persistent  # noqa: F401
 
         async with self._engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)

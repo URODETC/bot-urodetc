@@ -31,6 +31,9 @@ DEVELOPER_HELP = (
     "<code>/vpn</code> — меню управления Remnawave\n"
     "<code>/vpn_add имя [дней] [лимит_ГБ] [telegram_id]</code>\n"
     "<code>/vpn_extend имя дней</code> · <code>/vpn_report</code>"
+    "\n\n🎬 <b>Кино (только владелец)</b>\n"
+    "<code>/cinema название [год] [сезон N]</code> — раздачи RuTracker\n"
+    "<code>/cinema_status</code> — загрузки qBittorrent"
 )
 
 

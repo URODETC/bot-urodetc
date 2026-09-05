@@ -1,0 +1,92 @@
+# Standalone: docker compose -f compose.home.yml ...
+name: bot-home
+x-app: &app
+  build: .
+  restart: unless-stopped
+  env_file: .env
+  environment:
+    DATABASE_URL: postgresql+asyncpg://bot:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@db:5432/bot
+    REDIS_URL: redis://redis:6379/0
+    DOWNLOAD_DIR: /srv/data/downloads
+    POTOKEN_HTTP_URL: http://potoken:4416
+    TELEGRAM_PROXY_URL: http://hysteria:8080
+    RUTRACKER_PROXY_URL: http://hysteria:8080
+    QBITTORRENT_URL: http://qbittorrent:8080
+    QBITTORRENT_SAVE_PATH: /downloads/cinema
+    COOKIES_FILE: ${COOKIES_FILE:-}
+    LOCAL_API_BASE: ""
+  volumes:
+    - media:/srv/data/downloads
+    - ./secrets:/run/bot-secrets:ro
+  depends_on:
+    db:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+    hysteria:
+      condition: service_started
+    potoken:
+      condition: service_started
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: bot
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: bot
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U bot -d bot"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+  hysteria:
+    image: tobyxdd/hysteria:latest
+    restart: unless-stopped
+    command: [client, -c, /etc/hysteria.yaml]
+    volumes:
+      - ./secrets/hysteria.yaml:/etc/hysteria.yaml:ro
+  potoken:
+    image: brainicism/bgutil-ytdlp-pot-provider:latest
+    restart: unless-stopped
+  qbittorrent:
+    image: lscr.io/linuxserver/qbittorrent:latest
+    restart: unless-stopped
+    environment:
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
+      TZ: Europe/Moscow
+      WEBUI_PORT: "8080"
+      TORRENTING_PORT: "6881"
+    ports:
+      - "127.0.0.1:8080:8080"
+      - "6881:6881/tcp"
+      - "6881:6881/udp"
+    volumes:
+      - qbitconfig:/config
+      - ${TORRENT_DIR:-/srv/torrents}:/downloads
+  bot:
+    <<: *app
+    command: [python, -m, app.main]
+  worker:
+    <<: *app
+    command: [arq, app.tools.video.worker.WorkerSettings]
+networks:
+  default:
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.name: br-bot-home
+volumes:
+  pgdata:
+  media:
+  qbitconfig:

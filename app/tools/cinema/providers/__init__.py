@@ -1,0 +1,13 @@
+from typing import Protocol
+
+from app.tools.cinema.models import Release
+
+
+class TrackerProvider(Protocol):
+    async def search(self, title: str) -> list[Release]: ...
+    async def magnet(self, topic_id: int) -> str: ...
+
+
+class DownloadProvider(Protocol):
+    async def add(self, magnet: str) -> str: ...
+    async def status(self, info_hash: str) -> dict: ...

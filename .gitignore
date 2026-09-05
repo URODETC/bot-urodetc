@@ -20,3 +20,6 @@ cookies.txt
 
 .kilo/
 .ruff_cache/
+# Deployment secrets and local artifacts
+secrets/
+backups/

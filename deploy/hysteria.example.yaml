@@ -1,0 +1,5 @@
+# Hysteria 2 client URI, NOT the Remnawave subscription URL or API token.
+server: "hysteria2://REPLACE_WITH_YOUR_CLIENT_URI"
+http:
+  listen: 0.0.0.0:8080
+# This port is reachable only inside the Docker network; do not publish it.

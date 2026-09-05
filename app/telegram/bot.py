@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 
 from aiogram import Bot, Dispatcher
+from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.client.default import DefaultBotProperties
 from aiogram.client.telegram import TelegramAPIServer
 from aiogram.enums import ParseMode
@@ -22,10 +23,14 @@ def build_bot(settings: Settings) -> Bot:
         if settings.local_api_base
         else None
     )
+    session_options = {"api": server} if server else {}
+    session = AiohttpSession(
+        proxy=None if server else settings.telegram_proxy_url, **session_options
+    )
     return Bot(
         token=settings.bot_token,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
-        server=server,
+        session=session,
     )
 
 

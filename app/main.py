@@ -11,6 +11,9 @@ from app.infrastructure.database import Database
 from app.infrastructure.history import HistoryRepository
 from app.infrastructure.logging import setup_logging
 from app.registry.tools import ToolRegistry
+from app.jobs.persistent import PersistentQueue
+from app.tools.cinema.service import CinemaService
+from app.tools.cinema.tool import CinemaTool
 from app.telegram.bot import build_bot, build_dispatcher
 from app.tools.developer import DeveloperService, DeveloperTool
 from app.tools.network import (
@@ -78,6 +81,8 @@ async def run(settings: Settings) -> None:
     )
 
     registry = ToolRegistry()
+    cinema_service = CinemaService(PersistentQueue(db), owners=settings.owner_telegram_ids, configured=settings.cinema_configured)
+    registry.register(CinemaTool(cinema_service))
     registry.register(VideoTool(video_service))
     registry.register(NetworkTool(network_service))
     registry.register(DeveloperTool(developer_service))
@@ -85,6 +90,7 @@ async def run(settings: Settings) -> None:
 
     dp = build_dispatcher()
     dp["settings"] = settings
+    dp["cinema_service"] = cinema_service
     dp["video_service"] = video_service
     dp["network_service"] = network_service
     dp["developer_service"] = developer_service
@@ -111,6 +117,8 @@ def _bot_commands() -> list[BotCommand]:
         BotCommand(command="menu", description="Главное меню"),
         BotCommand(command="help", description="Все инструменты"),
         BotCommand(command="download", description="Скачать видео"),
+        BotCommand(command="cinema", description="Найти фильм или сериал"),
+        BotCommand(command="cinema_status", description="Загрузки qBittorrent"),
         BotCommand(command="whois", description="WHOIS домена или IP"),
         BotCommand(command="ip", description="DNS или PTR-записи"),
         BotCommand(command="ping", description="Проверить доступность"),

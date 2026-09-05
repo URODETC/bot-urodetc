@@ -12,6 +12,9 @@ from arq.connections import RedisSettings
 
 from app.infrastructure.config import DEFAULT_REDIS_URL, Settings
 from app.infrastructure.database import Database
+from app.jobs.persistent import PersistentQueue
+from app.jobs.service_worker import run_service_jobs
+from app.tools.cinema.runtime import build_cinema_worker
 from app.telegram.bot import build_bot
 from app.telegram.menu import main_menu_keyboard
 from app.telegram.vpn_ui import split_vpn_report
@@ -60,6 +63,11 @@ async def startup(ctx: dict) -> None:
     ctx["vpn_http_client"] = vpn_http_client
     ctx["vpn_service"] = vpn_service
     ctx["settings"] = settings
+    queue = PersistentQueue(db)
+    cinema_service, cinema_clients = build_cinema_worker(settings, queue)
+    ctx["service_queue"] = queue
+    ctx["cinema_clients"] = cinema_clients
+    ctx["service_job_handlers"] = {"cinema.search": cinema_service.execute_job, "cinema.download": cinema_service.execute_job}
     logger.info(
         "worker started",
         extra={"potoken_enabled": settings.po_tokens_enabled},
@@ -67,6 +75,8 @@ async def startup(ctx: dict) -> None:
 
 
 async def shutdown(ctx: dict) -> None:
+    for client in ctx.get("cinema_clients", []):
+        await client.aclose()
     vpn_http_client = ctx.get("vpn_http_client")
     if vpn_http_client is not None:
         await vpn_http_client.aclose()
@@ -157,6 +167,7 @@ async def _delete_status_messages(
 class WorkerSettings:
     functions = [download_video, send_vpn_report]
     cron_jobs = [
+        cron(run_service_jobs, second=set(range(0, 60, 5)), unique=True, timeout=240, max_tries=1),
         cron(
             send_vpn_report,
             weekday=os.environ.get("REMNAWAVE_REPORT_WEEKDAY", "mon").lower(),

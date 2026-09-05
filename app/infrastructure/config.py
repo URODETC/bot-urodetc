@@ -39,9 +39,20 @@ class Settings:
     download_dir: Path = Path(DEFAULT_DOWNLOAD_DIR)
     cookies_file: Path | None = None
     po_token_http_url: str | None = None
+    telegram_proxy_url: str | None = None
+    rutracker_proxy_url: str | None = None
     local_api_base: str | None = None
     max_file_size_mb: int | None = None
     owner_telegram_ids: tuple[int, ...] = ()
+    rutracker_url: str = "https://rutracker.org"
+    rutracker_username: str = ""
+    rutracker_password: str = ""
+    rutracker_session: str = ""
+    qbittorrent_url: str = ""
+    qbittorrent_username: str = ""
+    qbittorrent_password: str = ""
+    qbittorrent_save_path: str = ""
+    qbittorrent_category: str = "cinema"
     remnawave_url: str | None = None
     remnawave_token: str | None = None
     remnawave_caddy_token: str | None = None
@@ -79,6 +90,10 @@ class Settings:
     def is_owner(self, telegram_id: int | None) -> bool:
         return telegram_id is not None and telegram_id in self.owner_telegram_ids
 
+    @property
+    def cinema_configured(self) -> bool:
+        return bool(self.qbittorrent_url and (self.rutracker_session or (self.rutracker_username and self.rutracker_password)))
+
     @classmethod
     def from_env(cls) -> "Settings":
         raw_max = os.environ.get("MAX_FILE_SIZE_MB")
@@ -87,6 +102,8 @@ class Settings:
             raise ValueError("REMNAWAVE_API_MAJOR must be 2 or 3")
         return cls(
             bot_token=os.environ["BOT_TOKEN"],
+            telegram_proxy_url=os.environ.get("TELEGRAM_PROXY_URL") or None,
+            rutracker_proxy_url=os.environ.get("RUTRACKER_PROXY_URL") or None,
             log_level=_env_or("LOG_LEVEL", "INFO"),
             database_url=_env_or("DATABASE_URL", DEFAULT_DATABASE_URL),
             redis_url=_env_or("REDIS_URL", DEFAULT_REDIS_URL),
@@ -98,6 +115,15 @@ class Settings:
             local_api_base=_env_or("LOCAL_API_BASE", "") or None,
             max_file_size_mb=int(raw_max) if raw_max else None,
             owner_telegram_ids=_csv_ints("OWNER_TELEGRAM_IDS"),
+            rutracker_url=_env_or("RUTRACKER_URL", "https://rutracker.org").rstrip("/"),
+            rutracker_username=_env_or("RUTRACKER_USERNAME", ""),
+            rutracker_password=_env_or("RUTRACKER_PASSWORD", ""),
+            rutracker_session=_env_or("RUTRACKER_SESSION", ""),
+            qbittorrent_url=_env_or("QBITTORRENT_URL", "").rstrip("/"),
+            qbittorrent_username=_env_or("QBITTORRENT_USERNAME", ""),
+            qbittorrent_password=_env_or("QBITTORRENT_PASSWORD", ""),
+            qbittorrent_save_path=_env_or("QBITTORRENT_SAVE_PATH", ""),
+            qbittorrent_category=_env_or("QBITTORRENT_CATEGORY", "cinema"),
             remnawave_url=_env_or("REMNAWAVE_URL", "").rstrip("/") or None,
             remnawave_token=_env_or("REMNAWAVE_TOKEN", "") or None,
             remnawave_caddy_token=_env_or("REMNAWAVE_CADDY_TOKEN", "") or None,
