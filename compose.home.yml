@@ -9,8 +9,8 @@ x-app: &app
     REDIS_URL: redis://redis:6379/0
     DOWNLOAD_DIR: /srv/data/downloads
     POTOKEN_HTTP_URL: http://potoken:4416
-    TELEGRAM_PROXY_URL: http://hysteria:8080
-    RUTRACKER_PROXY_URL: http://hysteria:8080
+    TELEGRAM_PROXY_URL: http://mihomo:8080
+    RUTRACKER_PROXY_URL: http://mihomo:8080
     QBITTORRENT_URL: http://qbittorrent:8080
     QBITTORRENT_SAVE_PATH: /downloads/cinema
     COOKIES_FILE: ${COOKIES_FILE:-}
@@ -23,7 +23,7 @@ x-app: &app
       condition: service_healthy
     redis:
       condition: service_healthy
-    hysteria:
+    mihomo:
       condition: service_started
     potoken:
       condition: service_started
@@ -50,12 +50,13 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
-  hysteria:
-    image: tobyxdd/hysteria:latest
+  mihomo:
+    image: metacubex/mihomo:latest
     restart: unless-stopped
-    command: [client, -c, /etc/hysteria.yaml]
+    command: [-d, /root/.config/mihomo, -f, /etc/mihomo/config.yaml]
     volumes:
-      - ./secrets/hysteria.yaml:/etc/hysteria.yaml:ro
+      - ./secrets/mihomo.yaml:/etc/mihomo/config.yaml:ro
+      - mihomodata:/root/.config/mihomo
   potoken:
     image: brainicism/bgutil-ytdlp-pot-provider:latest
     restart: unless-stopped
@@ -90,3 +91,4 @@ volumes:
   pgdata:
   media:
   qbitconfig:
+  mihomodata:

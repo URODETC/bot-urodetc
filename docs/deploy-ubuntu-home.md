@@ -1,4 +1,4 @@
-# Домашний сервер: Ubuntu 24.04, Hysteria 2, zapret2 и qBittorrent
+# Домашний сервер: Ubuntu 24.04, Mihomo, zapret2 и qBittorrent
 
 Гайд для текущего проекта. Все команды выполняются на сервере в Bash, кроме явно отмеченных команд на Mac. Примеры используют пользователя `deploy` и адрес `SERVER_IP`: замени их своими. Сам сервер в этой задаче не настраивался; работа VPN и стратегии DPI требует проверки на твоём подключении.
 
@@ -6,16 +6,16 @@
 
 | Компонент / запрос | Путь |
 |---|---|
-| Telegram в bot и worker | HTTP CONNECT внутри Docker → клиент Hysteria 2 → VPN → Telegram |
-| Сайт RuTracker | Тот же клиент Hysteria |
+| Telegram в bot и worker | HTTP CONNECT внутри Docker → клиент Mihomo → VPN → Telegram |
+| Сайт RuTracker | Тот же клиент Mihomo |
 | YouTube в yt-dlp, внешние запросы potoken | Docker → zapret2 на Ubuntu → домашний провайдер |
 | qBittorrent: пиры, DHT, трекеры, раздача | Docker → домашний провайдер, без VPN |
 | Управление qBittorrent | worker → qbittorrent:8080 внутри Docker |
 | PostgreSQL и Redis | Внутри Docker |
 
-Hysteria здесь работает в режиме прикладного прокси, без TUN и изменения default route сервера. SOCKS5 через интернет не используется. zapret2 не меняет публичный IP и не исправляет антибот-проверки YouTube.
+Mihomo здесь работает в режиме прикладного прокси, без TUN и изменения default route сервера. SOCKS5 через интернет не используется. zapret2 не меняет публичный IP и не исправляет антибот-проверки YouTube.
 
-Используем **отдельный** `compose.home.yml`, не объединяем его с `docker-compose.yml`. В нём есть qBittorrent, локальный Hysteria-клиент и закрытый снаружи potoken. Для сети задано постоянное имя Linux-интерфейса `br-bot-home`.
+Используем **отдельный** `compose.home.yml`, не объединяем его с `docker-compose.yml`. В нём есть qBittorrent, локальный Mihomo-клиент и закрытый снаружи potoken. Для сети задано постоянное имя Linux-интерфейса `br-bot-home`.
 
 В код уже добавлены `TELEGRAM_PROXY_URL` и `RUTRACKER_PROXY_URL`. qBittorrent игнорирует прокси из окружения. Для aiogram установлена зависимость `aiohttp-socks`, которая нужна ему и для HTTP-прокси. Не задавай глобальные `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY` в `.env`: yt-dlp должен выходить напрямую.
 
@@ -92,9 +92,9 @@ cd ~/bot-urodetc
 umask 077
 mkdir -p secrets backups
 cp .env.example .env
-cp deploy/hysteria.example.yaml secrets/hysteria.yaml
+cp deploy/mihomo.example.yaml secrets/mihomo.yaml
 chmod 700 secrets backups
-chmod 600 .env secrets/hysteria.yaml
+chmod 600 .env secrets/mihomo.yaml
 id -u
 id -g
 openssl rand -hex 24
@@ -143,33 +143,35 @@ sudo install -d -o 1000 -g 1000 /srv/torrents /srv/torrents/cinema
 
 Если диск смонтирован в другом месте, укажи его каталог в `TORRENT_DIR`. В qBittorrent он всё равно виден как `/downloads`, а путь назначения бота — `/downloads/cinema`.
 
-## 5. Hysteria 2
+## 5. Mihomo
 
-Нужен **профиль клиента `hysteria2://…` или `hy2://…`**, а не URL подписки Remnawave и не API-токен панели. Проверь версию протокола: этот образ и конфигурация рассчитаны на Hysteria 2.
+Нужен **URL подписки пользователя Remnawave**. Это не API-токен панели и не отдельная ссылка `vless://` / `hy2://`. Скопируй подписку из панели и открой конфиг:
 
 ```bash
-nano secrets/hysteria.yaml
+nano secrets/mihomo.yaml
 ```
 
-```yaml
-server: "hysteria2://ТВОЙ_ПОЛНЫЙ_ПРОФИЛЬ"
-http:
-  listen: 0.0.0.0:8080
-```
+В `proxy-providers.remnawave.url` замени демонстрационный URL своим. Остальной файл оставь из `deploy/mihomo.example.yaml`. Переменные `.env` внутри этого YAML автоматически не подставляются.
 
-Копируй полный профиль с портом и параметрами TLS/obfs. Не публикуй его. Если используешь раздельные `server`, `auth`, `tls`, `obfs`, перенеси их из рабочего клиента по [схеме Hysteria](https://v2.hysteria.network/docs/advanced/Full-Client-Config/). Проверку сертификата оставь включённой; при собственной CA настрой доверие, а не отключай TLS-проверку.
+Используется образ `metacubex/mihomo:latest`. Конфигурация загружает узлы через HTTP provider каждый час и хранит кеш в volume `mihomodata`. Группа `VPN` типа `fallback` выбирает первый доступный узел по результатам проверки. Добавленного нами выхода `DIRECT` в этой группе нет; через прокси должны идти все запросы, которые приложения направили на `http://mihomo:8080`. Успех проверки доступности узла не гарантирует доступность Telegram — проверь его отдельно ниже.
 
-Образ взят из [официальной инструкции установки Hysteria](https://v2.hysteria.network/docs/getting-started/Installation/). В режиме HTTP-прокси контейнеру не нужны host networking или NET_ADMIN. Порт 8080 Hysteria не опубликован на хост.
+Заголовок `User-Agent: mihomo` запрашивает формат Mihomo у Remnawave. В ответ нужен YAML с непустым списком `proxies`. HTML-страница, JSON для другого клиента или шаблон, состоящий только из вложенных providers, для этой схемы не подходят. При необходимости настрой выдачу формата в панели. Загружаются узлы, а правила маршрутизации и группы из полного удалённого профиля не импортируются: используются локальные правила этого проекта. Если профиль использует сложные цепочки, их зависимости потребуется перенести отдельно.
+
+Подписка при первом запуске загружается напрямую. Её домен должен быть доступен с сервера без ещё не настроенного VPN. Если он заблокирован, сначала обеспечь доступ к домену; загрузка через собственную пока пустую группу `VPN` создаст замкнутую зависимость. При HWID-привязке соблюди требования своей панели для отдельного устройства, иначе она может вернуть пустую подписку.
+
+Порт прокси не опубликован на хост, API управления не включён, TUN и NET_ADMIN не нужны. TLS-проверку узлов не отключай. URL подписки и кеш содержат доступ к VPN: не публикуй их, сохрани права 600 на конфиг.
+
+Документация: [HTTP providers Mihomo](https://wiki.metacubex.one/en/config/proxy-providers/), [форматы подписок Remnawave](https://docs.rw/learn-en/templates/).
 
 ```bash
 docker compose -f compose.home.yml config --quiet
 docker compose -f compose.home.yml pull
 docker compose -f compose.home.yml build
-docker compose -f compose.home.yml up -d hysteria db redis potoken qbittorrent
-docker compose -f compose.home.yml logs --tail=50 hysteria
+docker compose -f compose.home.yml up -d mihomo db redis potoken qbittorrent
+docker compose -f compose.home.yml logs --tail=50 mihomo
 ```
 
-Не отправляй сырые логи Hysteria другим людям: в них может оказаться URI доступа. Успешный запуск контейнера ещё не проверяет туннель.
+Не отправляй сырые логи Mihomo другим людям: в них может оказаться URI доступа. Успешный запуск контейнера ещё не проверяет туннель.
 
 Сравни прямой и проксированный выход из образа worker:
 
@@ -178,7 +180,7 @@ docker compose -f compose.home.yml run --rm --no-deps worker \
   curl -4 --noproxy '*' --max-time 20 https://api.ipify.org
 
 docker compose -f compose.home.yml run --rm --no-deps worker \
-  curl --proxy http://hysteria:8080 --max-time 20 https://api.ipify.org
+  curl --proxy http://mihomo:8080 --max-time 20 https://api.ipify.org
 ```
 
 В первом случае ожидается домашний публичный IPv4, во втором — выход VPN. Если сервис проверки IP недоступен, это ещё не доказательство поломки туннеля: проверь целевой сервис.
@@ -205,11 +207,25 @@ PY
 
 ```bash
 docker compose -f compose.home.yml run --rm --no-deps worker \
-  curl --proxy http://hysteria:8080 --max-time 30 -L -o /dev/null \
+  curl --proxy http://mihomo:8080 --max-time 30 -L -o /dev/null \
   -w '%{http_code}\n' https://rutracker.org/forum/index.php
 ```
 
-Таймаут Hysteria означает, что сначала надо проверить профиль, UDP-доступность сервера, TLS и obfs. Наличие подписки само по себе не доказывает, что её транспорт работает из этой сети.
+Таймаут Mihomo означает, что сначала надо проверить загрузку подписки, наличие узлов и доступность выбранного транспорта. Наличие подписки само по себе не доказывает, что её транспорт работает из этой сети.
+
+### Переход с прежнего Hysteria-контейнера
+
+После переноса новых файлов создай `secrets/mihomo.yaml` по шаблону выше. Если старый стек уже работает, сначала подними Mihomo и проверь Telegram командой из этого раздела. Затем пересоздай приложения и удали только старый контейнер:
+
+```bash
+docker compose -f compose.home.yml up -d mihomo
+docker compose -f compose.home.yml up -d bot worker
+docker ps -a --filter label=com.docker.compose.project=bot-home --filter label=com.docker.compose.service=hysteria --format '{{.ID}} {{.Names}}'
+```
+
+Если список содержит старый Hysteria этого проекта, удали его командой `docker rm -f ИД_ИЗ_СПИСКА`. Не применяй `down -v`. Старый `secrets/hysteria.yaml` после успешного перехода больше не используется.
+
+После редактирования URL или локальных правил выполни `docker compose -f compose.home.yml restart mihomo`. Для проверки синтаксиса с заполненным конфигом: `docker compose -f compose.home.yml run --rm --no-deps mihomo -t -d /root/.config/mihomo -f /etc/mihomo/config.yaml`. Это не заменяет проверку загрузки подписки и запросов через прокси.
 
 ## 6. qBittorrent
 
@@ -304,7 +320,7 @@ sudo journalctl -u zapret2 -n 80 --no-pager
 sudo nft list ruleset
 ```
 
-Убедись, что правила охватывают трафик с `br-bot-home`, а не только OUTPUT хоста. После изменения настроек перепроверь Telegram через Hysteria. Не выполняй `nft flush ruleset` или `iptables -F`: это уничтожит в том числе Docker-правила.
+Убедись, что правила охватывают трафик с `br-bot-home`, а не только OUTPUT хоста. После изменения настроек перепроверь Telegram через Mihomo. Не выполняй `nft flush ruleset` или `iptables -F`: это уничтожит в том числе Docker-правила.
 
 Для первоначального воспроизведения используй IPv4. Если включаешь IPv6 для контейнеров, его маршрут и правила нужно проверить отдельно. Работоспособность IPv4 ничего не говорит о IPv6.
 
@@ -377,16 +393,16 @@ docker compose -f compose.home.yml logs --tail=100 bot worker
 
 Здесь используется облачный Telegram Bot API и текущий лимит проекта 50 MB. Для больших файлов нужен отдельный Local Bot API Server и правильные пути общих файлов; он сам тоже должен иметь доступ к Telegram. Этот гайд его не включает. Не повышай только `MAX_FILE_SIZE_MB`: серверный лимит от этого не изменится.
 
-Проверка независимости торрентов: запусти разрешённую тестовую раздачу, затем временно останови Hysteria:
+Проверка независимости торрентов: запусти разрешённую тестовую раздачу, затем временно останови Mihomo:
 
 ```bash
-docker compose -f compose.home.yml stop hysteria
+docker compose -f compose.home.yml stop mihomo
 ```
 
 Telegram и поиск RuTracker должны перестать работать через этот прокси, а qBittorrent — продолжить обмен с доступными пирами. Сразу восстанови:
 
 ```bash
-docker compose -f compose.home.yml up -d hysteria
+docker compose -f compose.home.yml up -d mihomo
 ```
 
 Заблокированный адрес torrent-трекера при прямом подключении может оставаться недоступным. DHT не заменяет трекер для всех раздач, особенно private. Это отдельное ограничение требования «весь torrent напрямую».
@@ -443,7 +459,7 @@ docker compose -f compose.home.yml up -d bot worker
 | Симптом | Что проверять |
 |---|---|
 | Telegram Conflict | Другую polling-копию, старый webhook |
-| Telegram timeout | Hysteria, правильность профиля, UDP/TLS/obfs |
+| Telegram timeout | Mihomo, загрузку подписки, наличие и доступность узлов |
 | RuTracker работает в curl, поиск нет | Авторизацию, CAPTCHA, срок сессии |
 | qBittorrent 401/403 | Постоянный пароль, бан после неудачных входов, Host header |
 | YouTube на Ubuntu работает, в worker нет | `br-bot-home`, transit/postrouting, IPv4/IPv6 и DNS контейнера |

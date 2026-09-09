@@ -1,0 +1,35 @@
+# Copy to secrets/mihomo.yaml and replace the subscription URL below.
+# No TUN, host routing changes, public proxy port or controller API.
+port: 8080
+allow-lan: true
+bind-address: '*'
+mode: rule
+log-level: info
+ipv6: false
+
+proxy-providers:
+  remnawave:
+    type: http
+    url: "https://YOUR_SUBSCRIPTION_DOMAIN/YOUR_SUBSCRIPTION_TOKEN"
+    path: ./providers/remnawave.yaml
+    interval: 3600
+    proxy: DIRECT
+    header:
+      User-Agent:
+        - "mihomo"
+    health-check:
+      enable: true
+      url: https://www.gstatic.com/generate_204
+      interval: 300
+      lazy: false
+
+proxy-groups:
+  - name: VPN
+    type: fallback
+    use:
+      - remnawave
+    url: https://www.gstatic.com/generate_204
+    interval: 300
+
+rules:
+  - MATCH,VPN
